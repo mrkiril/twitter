@@ -63,10 +63,10 @@ class Twitter(BaseServer):
         if request.method == "GET":
             self.logger.debug("Main Page GET")
             self.logger.debug("return_user_page")
-            self.logger.debug("for user:", user)
+            self.logger.debug("for user:"+ str(user))
             self.session_toc_user[cookiessum] = user
             data = self.return_user_page(user)
-            return HttpResponse(data, content_type='html')
+            return HttpResponse(data.encode(), content_type='html')
 
         if request.method == "POST":
             self.logger.debug("Main Page POST")
@@ -77,20 +77,20 @@ class Twitter(BaseServer):
                     return self.redirect_to("/auth")
                 self.data_base.add_data_to_sql(user, request.POST["text"])
                 data = self.return_user_page(user)
-                return HttpResponse(data, content_type='html')
+                return HttpResponse(data.encode(), content_type='html')
             if request.POST["type_post"] == "delete_post":
                 self.logger.debug("DELETE_POST")
                 self.data_base.delete_data_from_sql(
                     user_id=user,
                     row_id=request.POST["elem"])
                 data = self.return_user_page(user)
-                return HttpResponse(data, content_type='html')
+                return HttpResponse(data.encode(), content_type='html')
 
             if request.POST["type_post"] == "exit":
                 self.logger.debug("EXIT")
                 date = datetime.datetime.utcnow()
                 data = ""
-                return HttpResponse(data,
+                return HttpResponse(data.encode(),
                                     status_code="301",
                                     content_type='html',
                                     location="/auth",
@@ -118,7 +118,7 @@ class Twitter(BaseServer):
                         request.POST["register_email"],
                         request.POST["password"])
                     data = ""
-                    return HttpResponse(data,
+                    return HttpResponse(data.encode(),
                                         status_code="301",
                                         content_type='html',
                                         location="/",
@@ -131,7 +131,7 @@ class Twitter(BaseServer):
                         "There is user with this e-mail. Try another")
                     data = re.sub(
                         "<!-- MESSAGE WRONG REGISTER-->", message, data)
-                    return HttpResponse(data,
+                    return HttpResponse(data.encode(),
                                         status_code="200",
                                         content_type='html')
 
@@ -146,7 +146,7 @@ class Twitter(BaseServer):
                     user = enter_user[1]
                     self.session_toc_user[cookies] = user
                     data = ""
-                    return HttpResponse(data,
+                    return HttpResponse(data.encode(),
                                         status_code="301",
                                         content_type='html',
                                         location="/",
@@ -158,13 +158,13 @@ class Twitter(BaseServer):
                         "3",
                         "There is incorrect e-mail or password. Try again")
                     data = re.sub("<!-- MESSAGE -->", message, data)
-                    return HttpResponse(data,
+                    return HttpResponse(data.encode(),
                                         status_code="200",
                                         content_type='html')
 
         if request.method == "GET":
             data = self.return_auth_page()
-            return HttpResponse(data,
+            return HttpResponse(data.encode(),
                                 status_code="200",
                                 content_type='html')
 
@@ -183,7 +183,7 @@ class Twitter(BaseServer):
 
     def redirect_to(self, loc):
         data = ""
-        return HttpResponse(data,
+        return HttpResponse(data.encode(),
                             status_code="301",
                             content_type='html',
                             location=loc)
