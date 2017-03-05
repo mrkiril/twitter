@@ -49,12 +49,12 @@ class Test_serv(unittest.TestCase):
         config.read(os.path.join(self.file_path,
                                  "..", "setting", "setting.ini"))
         print(os.path.join(self.file_path, "..", "setting", "setting.ini"))
-        self.ip = config['DEFAULT']["ip"]
-        self.port = config['DEFAULT']["port"]
-        self.sock = self.ip + ":" + self.port
+        self.ip = config['ip_port_setting']["ip"]
+        self.port = config['ip_port_setting']["port"]
+        self.domen = self.ip + ":" + self.port
 
     def process(self, child_pid):
-        children = subprocess.Popen(["python3", "search_serv.py"], shell=False)
+        children = subprocess.Popen(["python3", "twitter.py"], shell=False)
         child_pid.value = children.pid
         print("OLOLO >> ", child_pid.value)
 
@@ -81,7 +81,9 @@ class Test_serv(unittest.TestCase):
 
     def test_page(self):
         sleep(1)
+        res = self.client.get('http://' + self.domen + '/search?q=tarantino')
 
+        '''
         res = self.client.get('http://' + self.sock + '/search?q=tarantino',
                               retry=1)
         self.assertEqual(res.status_code, "200")
@@ -139,7 +141,7 @@ class Test_serv(unittest.TestCase):
         status_code = status.group(1).decode()
         self.assertEqual(status_code, "400")
         sock.close()
-
+        '''
 
 if __name__ == '__main__':
     unittest.main()
