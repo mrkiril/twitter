@@ -1,18 +1,20 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+import sys
+sys.path.append('../')
 import os.path
 import re
 import socket
 import unittest
-from httpclient import HttpClient
 import subprocess
 import multiprocessing
-from time import sleep
 import signal
 import configparser
 import logging
 import logging.config
-
+from time import sleep
+from httpclient import HttpClient
+from twitter_db import DataBese
 
 class Test_serv(unittest.TestCase):
 
@@ -24,15 +26,22 @@ class Test_serv(unittest.TestCase):
         my_user_pass = ('kiril', 'supersecret')
 
         self.client = HttpClient(
-            connect_timeout=10,         # socket timeout on connect
-            transfer_timeout=4,        # socket timeout on send/recv
+            connect_timeout=5,         # socket timeout on connect
+            transfer_timeout=3,        # socket timeout on send/recv
             max_redirects=10,
             set_referer=True,
             keep_alive=3,               # Keep-alive socket up to N requests
+            headers=my_headers,         # send custom headers
             http_version="1.1",         # use custom http/version
+            auth=my_user_pass,          # http auth
             retry=5,
-            retry_delay=10)             # wait betweet tries
+            retry_delay=5)             # wait betweet tries
 
+        #
+        # Enter the path to the cookies file in setting file
+        #
+        dictionary = self.client.configure_from_file(
+            os.path.join(self.file_path, "http_client_setting.ini"))
         self.client.logger = logging.getLogger("httpclient_test")
         os.chdir("../")
         self.children = multiprocessing.Value('i', 0)
@@ -45,13 +54,15 @@ class Test_serv(unittest.TestCase):
         print("slave >> " + str(self.pid))
         print("head  >> " + str(os.getpid()))
         print("child >> " + str(self.children.value))
-        config = configparser.ConfigParser()
-        config.read(os.path.join(self.file_path,
+        self.config = configparser.ConfigParser()
+        self.config.read(os.path.join(self.file_path,
                                  "..", "setting", "setting.ini"))
         print(os.path.join(self.file_path, "..", "setting", "setting.ini"))
-        self.ip = config['ip_port_setting']["ip"]
-        self.port = config['ip_port_setting']["port"]
+        self.ip = self.config['ip_port_setting']["ip"]
+        self.port = self.config['ip_port_setting']["port"]
         self.domen = self.ip + ":" + self.port
+        self.data_base = DataBese(os.path.join(self.file_path, "..", "setting", "setting.ini"))
+
 
     def process(self, child_pid):
         children = subprocess.Popen(["python3", "twitter.py"], shell=False)
@@ -78,70 +89,95 @@ class Test_serv(unittest.TestCase):
         except Exception as e:
             print("try to kill ", self.pid, " but Exception")
             print(e.args)
+        print("Delete database ", self.config['database']["DB"])
+        print(os.getcwd())
+        os.remove(self.config['database']["DB"])
+
+
 
     def test_page(self):
         sleep(1)
-        res = self.client.get('http://' + self.domen + '/search?q=tarantino')
+        # Register new user
+        # And check cookies
+        res = self.client.post('http://' + self.domen + '/auth',
+                                data={'register_email': 'test_ser@ukr.net', 
+                                       'password': 'password'})
+        user_list = list(dict(self.data_base.read_auth_from_sql()).values())
+        self.assertIn('test_ser@ukr.net', user_list)
+        self.assertIn("."+self.domen, res.cook_dick)
+        
 
-        '''
-        res = self.client.get('http://' + self.sock + '/search?q=tarantino',
-                              retry=1)
-        self.assertEqual(res.status_code, "200")
 
-        res = self.client.get('http://' + self.sock + '/search'
-                              '?q=ragnar+lothbrok',
-                              output=os.path.join(self.file_path,
-                                                  "socket_page.html"))
-        pat1 = re.search("ragnar", res.body)
-        pat2 = re.search("lothbrok", res.body)
-        self.assertEqual(res.status_code, "200")
-        # перевірка на наявність слова в видачі
-        self.assertIsNotNone(pat1)
-        self.assertIsNotNone(pat2)
+        # Push new posr to twitter
+        #
+        res = self.client.post('http://' + self.domen + '/',
+                                data={'type_post': 'post_post', 
+                                      'text': 'Some new post 0'})
+        res = self.client.post('http://' + self.domen + '/',
+                                data={'type_post': 'post_post', 
+                                      'text': 'Some new post 1'})
+        post_data_list = [el[1] for el in self.data_base.read_data_from_sql('test_ser@ukr.net')]
+        self.assertIn('Some new post 1', post_data_list)
+        self.assertIn('Some new post 0', post_data_list)
 
-        res = self.client.get(
-            'http://' + self.sock + '/wrong_page.,!@#$%^&*(WTF_page)')
-        self.assertEqual(res.status_code, "404")
 
-        res = self.client.get('http://' + self.sock + '/test_timeout')
-        self.assertEqual(res.status_code, "")
+        # Try push POST with WRONG cookie
+        # New post not in database
+        res = self.client.post('http://' + self.domen + '/',
+                                cookie={"twit":"ce538b70a7c30f98ab056cd2dc1151b9"},
+                                data={'type_post': 'post_post', 
+                                      'text': 'BLA BLA BLA'})
+        post_data_list = [el[1] for el in self.data_base.read_data_from_sql('test_ser@ukr.net')]
+        self.assertNotIn('BLA BLA BLA', post_data_list)
+                
+        
 
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        addr = (self.ip, int(self.port))
-        sock.connect(addr)
-        CRLF = b"\r\n"
-        q = b"GETT /search?q=tarantino HTTP/1.1" + CRLF
-        q += b"User-Agent: Mozilla/4.0 (compatible; MSIE5.01; Windows NT)" + \
-            CRLF
-        q += b"Host: " + self.sock.encode() + CRLF
-        q += b"Connection: Close" + CRLF
-        q += CRLF
-        sock.send(q)
-        response = b""
-        response += sock.recv(65535)
-        status = re.search(b"HTTP.*? (\d+) ", response[:16])
-        status_code = status.group(1).decode()
-        self.assertEqual(status_code, "400")
-        sock.close()
+        # delete_post
+        # 
+        res = self.client.post('http://' + self.domen + '/',                                
+                                data={'type_post': 'delete_post', 
+                                      'elem': '1'})
+        post_data_list = [el[1] for el in self.data_base.read_data_from_sql('test_ser@ukr.net')]
+        self.assertNotIn('Some new post 0', post_data_list)
 
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        addr = (self.ip, int(self.port))
-        sock.connect(addr)
-        CRLF = b"\r\n"
-        q = b"/GET /search?q=tarantino HTTP/1.1" + CRLF
-        q += b"User-Agent: Mozilla/4.0 (compatible; MSIE5.01; Windows NT)" + \
-            CRLF
-        q += b"Host: " + self.sock.encode() + CRLF
-        q += b"Connection: Close" + CRLF
-        q += CRLF
-        sock.send(q)
-        response = b""
-        response += sock.recv(65535)
-        status = re.search(b"HTTP.*? (\d+) ", response[:16])
-        status_code = status.group(1).decode()
-        self.assertEqual(status_code, "400")
-        sock.close()
-        '''
+
+
+        # Exit
+        # 
+        res = self.client.post('http://' + self.domen + '/',                                
+                                data={'type_post': 'exit'})
+        self.assertNotIn("."+self.domen, res.cook_dick)
+        post_data_list = [el[1] for el in self.data_base.read_data_from_sql('test_ser@ukr.net')]
+        self.assertNotIn('Some new post 0', post_data_list)
+
+
+        #print(list(dict(self.data_base.read_auth_from_sql()).values())   )
+        #print(  [el[1] for el in self.data_base.read_data_from_sql('test_ser@ukr.net')]   )
+        #print("\r\n"*5)
+        #for el in self.data_base.read_data_from_sql('test_ser@ukr.net'):
+        #    print(el[2], el[1])
+
+
+
+        # Enter with erong e-mail and pass
+        # Message which say that e-mail or pass is Incorect
+        #
+        res = self.client.post('http://' + self.domen + '/auth',                                
+                                data={'enter_email': 'test_ser@ukr.net', 
+                                      'password': 'wrong_password'})
+        self.assertIn(b"There is incorrect e-mail or password. Try again", res.body)
+        
+
+        # Try register user with same e-mail
+        #
+        #        
+        res = self.client.post('http://' + self.domen + '/auth',
+                                data={'register_email': 'test_ser@ukr.net', 
+                                       'password': 'new_password'})
+        user_list = list(dict(self.data_base.read_auth_from_sql()).values())
+        self.assertIn(b'There is user with this e-mail. Try another', res.body)
+
+
 
 if __name__ == '__main__':
     unittest.main()

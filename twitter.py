@@ -88,7 +88,7 @@ class Twitter(BaseServer):
 
             if request.POST["type_post"] == "exit":
                 self.logger.debug("EXIT")
-                date = datetime.datetime.utcnow()
+                date= datetime.datetime(1970, 1, 1, 0, 0)
                 data = ""
                 return HttpResponse(data.encode(),
                                     status_code="301",
@@ -118,10 +118,13 @@ class Twitter(BaseServer):
                         request.POST["register_email"],
                         request.POST["password"])
                     data = ""
+                    y = datetime.datetime.utcnow().year
+                    date= datetime.datetime(y+1, 12, 31, 23, 59)
                     return HttpResponse(data.encode(),
                                         status_code="301",
                                         content_type='html',
                                         location="/",
+                                        cookies_expires=date,
                                         set_cookies={"twit": cookies})
 
                 if register_user is not None:
@@ -146,10 +149,13 @@ class Twitter(BaseServer):
                     user = enter_user[1]
                     self.session_toc_user[cookies] = user
                     data = ""
+                    y = datetime.datetime.utcnow().year
+                    date= datetime.datetime(y+1, 12, 31, 23, 59)
                     return HttpResponse(data.encode(),
                                         status_code="301",
                                         content_type='html',
                                         location="/",
+                                        cookies_expires=date,
                                         set_cookies={"twit": cookies})
 
                 if enter_user is None:
