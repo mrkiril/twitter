@@ -16,6 +16,7 @@ from time import sleep
 from httpclient import HttpClient
 from twitter_db import DataBese
 
+
 class Test_serv(unittest.TestCase):
 
     def setUp(self):
@@ -56,13 +57,13 @@ class Test_serv(unittest.TestCase):
         print("child >> " + str(self.children.value))
         self.config = configparser.ConfigParser()
         self.config.read(os.path.join(self.file_path,
-                                 "..", "setting", "setting.ini"))
+                                      "..", "setting", "setting.ini"))
         print(os.path.join(self.file_path, "..", "setting", "setting.ini"))
         self.ip = self.config['ip_port_setting']["ip"]
         self.port = self.config['ip_port_setting']["port"]
         self.domen = self.ip + ":" + self.port
-        self.data_base = DataBese(os.path.join(self.file_path, "..", "setting", "setting.ini"))
-
+        self.data_base = DataBese(
+            os.path.join(self.file_path, "..", "setting", "setting.ini"))
 
     def process(self, child_pid):
         children = subprocess.Popen(["python3", "twitter.py"], shell=False)
@@ -93,90 +94,80 @@ class Test_serv(unittest.TestCase):
         print(os.getcwd())
         os.remove(self.config['database']["DB"])
 
-
-
     def test_page(self):
         sleep(1)
         # Register new user
         # And check cookies
         res = self.client.post('http://' + self.domen + '/auth',
-                                data={'register_email': 'test_ser@ukr.net', 
-                                       'password': 'password'})
+                               data={'register_email': 'test_ser@ukr.net',
+                                     'password': 'password'})
         user_list = list(dict(self.data_base.read_auth_from_sql()).values())
         self.assertIn('test_ser@ukr.net', user_list)
-        self.assertIn("."+self.domen, res.cook_dick)
-        
-
+        self.assertIn("." + self.domen, res.cook_dick)
 
         # Push new posr to twitter
         #
         res = self.client.post('http://' + self.domen + '/',
-                                data={'type_post': 'post_post', 
-                                      'text': 'Some new post 0'})
+                               data={'type_post': 'post_post',
+                                     'text': 'Some new post 0'})
         res = self.client.post('http://' + self.domen + '/',
-                                data={'type_post': 'post_post', 
-                                      'text': 'Some new post 1'})
-        post_data_list = [el[1] for el in self.data_base.read_data_from_sql('test_ser@ukr.net')]
+                               data={'type_post': 'post_post',
+                                     'text': 'Some new post 1'})
+        post_data_list = [
+            el[1] for el in self.data_base.read_data_from_sql(
+                'test_ser@ukr.net')]
         self.assertIn('Some new post 1', post_data_list)
         self.assertIn('Some new post 0', post_data_list)
-
 
         # Try push POST with WRONG cookie
         # New post not in database
         res = self.client.post('http://' + self.domen + '/',
-                                cookie={"twit":"ce538b70a7c30f98ab056cd2dc1151b9"},
-                                data={'type_post': 'post_post', 
-                                      'text': 'BLA BLA BLA'})
-        post_data_list = [el[1] for el in self.data_base.read_data_from_sql('test_ser@ukr.net')]
+                               cookie={
+                                   "twit": "ce538b70a7c30f98ab056cd2dc1151b9"},
+                               data={'type_post': 'post_post',
+                                     'text': 'BLA BLA BLA'})
+        post_data_list = [
+            el[1] for el in self.data_base.read_data_from_sql(
+                'test_ser@ukr.net')]
         self.assertNotIn('BLA BLA BLA', post_data_list)
-                
-        
 
         # delete_post
-        # 
-        res = self.client.post('http://' + self.domen + '/',                                
-                                data={'type_post': 'delete_post', 
-                                      'elem': '1'})
-        post_data_list = [el[1] for el in self.data_base.read_data_from_sql('test_ser@ukr.net')]
+        #
+        res = self.client.post('http://' + self.domen + '/',
+                               data={'type_post': 'delete_post',
+                                     'elem': '1'})
+        post_data_list = [
+            el[1] for el in self.data_base.read_data_from_sql(
+                'test_ser@ukr.net')]
         self.assertNotIn('Some new post 0', post_data_list)
-
-
 
         # Exit
-        # 
-        res = self.client.post('http://' + self.domen + '/',                                
-                                data={'type_post': 'exit'})
-        self.assertNotIn("."+self.domen, res.cook_dick)
-        post_data_list = [el[1] for el in self.data_base.read_data_from_sql('test_ser@ukr.net')]
+        #
+        res = self.client.post('http://' + self.domen + '/',
+                               data={'type_post': 'exit'})
+        self.assertNotIn("." + self.domen, res.cook_dick)
+        post_data_list = [
+            el[1] for el in self.data_base.read_data_from_sql(
+                'test_ser@ukr.net')]
         self.assertNotIn('Some new post 0', post_data_list)
-
-
-        #print(list(dict(self.data_base.read_auth_from_sql()).values())   )
-        #print(  [el[1] for el in self.data_base.read_data_from_sql('test_ser@ukr.net')]   )
-        #print("\r\n"*5)
-        #for el in self.data_base.read_data_from_sql('test_ser@ukr.net'):
-        #    print(el[2], el[1])
-
-
 
         # Enter with erong e-mail and pass
         # Message which say that e-mail or pass is Incorect
         #
-        res = self.client.post('http://' + self.domen + '/auth',                                
-                                data={'enter_email': 'test_ser@ukr.net', 
-                                      'password': 'wrong_password'})
-        self.assertIn(b"There is incorrect e-mail or password. Try again", res.body)
-        
+        res = self.client.post('http://' + self.domen + '/auth',
+                               data={'enter_email': 'test_ser@ukr.net',
+                                     'password': 'wrong_password'})
+        self.assertIn(
+            b"There is incorrect e-mail or password. Try again", res.body)
 
         # Try register user with same e-mail
         #
-        #        
+        #
         res = self.client.post('http://' + self.domen + '/auth',
-                                data={'register_email': 'test_ser@ukr.net', 
-                                       'password': 'new_password'})
+                               data={'register_email': 'test_ser@ukr.net',
+                                     'password': 'new_password'})
         user_list = list(dict(self.data_base.read_auth_from_sql()).values())
         self.assertIn(b'There is user with this e-mail. Try another', res.body)
-
 
 
 if __name__ == '__main__':

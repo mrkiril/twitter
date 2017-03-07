@@ -44,9 +44,6 @@ class Twitter(BaseServer):
         self.session_toc_user = {}
 
     def main_page(self, request):
-        print("MAIN PAGE LALALA")
-        print(request.method)
-        print(request.COOKIE)
         if "twit" not in request.COOKIE:
             self.logger.debug("Theere is no Cookies")
             self.logger.debug("Redirect to auth/")
@@ -54,7 +51,6 @@ class Twitter(BaseServer):
 
         cookiessum = request.COOKIE["twit"]
         user = self.is_really_auth(cookiessum)
-        print("USER IS >>> ", user)
         if user is None:
             self.logger.debug("Redirect to auth/")
             self.logger.debug("COOKIES not find in base. GOTO ")
@@ -63,14 +59,13 @@ class Twitter(BaseServer):
         if request.method == "GET":
             self.logger.debug("Main Page GET")
             self.logger.debug("return_user_page")
-            self.logger.debug("for user:"+ str(user))
+            self.logger.debug("for user:" + str(user))
             self.session_toc_user[cookiessum] = user
             data = self.return_user_page(user)
             return HttpResponse(data.encode(), content_type='html')
 
         if request.method == "POST":
             self.logger.debug("Main Page POST")
-            print(request.POST)
             if request.POST["type_post"] == "post_post":
                 self.logger.debug("POST_POST")
                 if "text" not in request.POST:
@@ -88,7 +83,7 @@ class Twitter(BaseServer):
 
             if request.POST["type_post"] == "exit":
                 self.logger.debug("EXIT")
-                date= datetime.datetime(1970, 1, 1, 0, 0)
+                date = datetime.datetime(1970, 1, 1, 0, 0)
                 data = ""
                 return HttpResponse(data.encode(),
                                     status_code="301",
@@ -98,28 +93,23 @@ class Twitter(BaseServer):
                                     cookies_expires=date)
 
     def auth(self, request):
-        print("AUTH LALALA")
         if "twit" in request.COOKIE:
             cookiessum = request.COOKIE["twit"]
             cook_user = self.is_really_auth(cookiessum)
-            print("USER IS >>> ", cook_user)
             if cook_user is not None:
                 return self.redirect_to("/")
 
         if request.method == "POST":
             if "register_email" in request.POST:
-                print("Registration")
-                print(request.POST)
                 register_user = self.data_base.is_user_in_base(
                     request.POST["register_email"])
                 if register_user is None:
-                    print("user in base")
                     cookies = self.data_base.add_auth_to_sql(
                         request.POST["register_email"],
                         request.POST["password"])
                     data = ""
                     y = datetime.datetime.utcnow().year
-                    date= datetime.datetime(y+1, 12, 31, 23, 59)
+                    date = datetime.datetime(y + 1, 12, 31, 23, 59)
                     return HttpResponse(data.encode(),
                                         status_code="301",
                                         content_type='html',
@@ -139,8 +129,6 @@ class Twitter(BaseServer):
                                         content_type='html')
 
             if "enter_email" in request.POST:
-                print("Authorisation")
-                print(request.POST)
                 enter_user = self.data_base.is_user_and_pass_in_base(
                     request.POST["enter_email"], request.POST["password"])
                 data = ''
@@ -150,7 +138,7 @@ class Twitter(BaseServer):
                     self.session_toc_user[cookies] = user
                     data = ""
                     y = datetime.datetime.utcnow().year
-                    date= datetime.datetime(y+1, 12, 31, 23, 59)
+                    date = datetime.datetime(y + 1, 12, 31, 23, 59)
                     return HttpResponse(data.encode(),
                                         status_code="301",
                                         content_type='html',
@@ -220,9 +208,6 @@ class Twitter(BaseServer):
             text = fp.read()
         text = re.sub("DOMEN", self.domen + "/", text)
         arr = self.data_base.read_data_from_sql(user_id)
-        print("ARR")
-
-        print(arr)
         for ar in arr:
             date, twit, row_id = ar
             twit = urllib.parse.unquote_plus(twit)
@@ -240,10 +225,11 @@ class Twitter(BaseServer):
                  "3": "alert-warning",
                  "4": "alert-danger"}
         text = '''
-                <div class="alert ''' + level[lv] + ''' alert-dismissable">
-                    <button type="button" class="close" data-dismiss="alert" aria-hidden="true">&times;</button>
-                  <strong>Warning!</strong> ''' + user_message + '''
-                </div><!-- MESSAGE WRONG REGISTER-->'''
+        <div class="alert ''' + level[lv] + ''' alert-dismissable">
+            <button type="button" class="close" data-dismiss="alert"
+                                         aria-hidden="true">&times;</button>
+          <strong>Warning!</strong> ''' + user_message + '''
+        </div><!-- MESSAGE WRONG REGISTER-->'''
         return text
 
     def message_auth(self, lv, user_message):
@@ -256,27 +242,32 @@ class Twitter(BaseServer):
                  "3": "alert-warning",
                  "4": "alert-danger"}
         text = '''
-                <div class="alert ''' + level[lv] + ''' alert-dismissable">
-                    <button type="button" class="close" data-dismiss="alert" aria-hidden="true">&times;</button>
-                  <strong>Warning!</strong> ''' + user_message + '''
-                </div><!-- MESSAGE -->'''
+        <div class="alert ''' + level[lv] + ''' alert-dismissable">
+        <button type="button" class="close" data-dismiss="alert"
+        aria-hidden="true">&times;</button>
+        <strong>Warning!</strong> ''' + user_message + '''
+        </div><!-- MESSAGE -->'''
         return text
 
     def add_new_html_twit(self, username, twit, date, row_id):
-        text = '''  <div class="blog-post"> 
-                        <div class="row">
-                            <div class="col-xs-6 col-sm-6 col-md-6 col-lg-6">
-                                <p class="blog-post-meta">DATE <a href="#">USERNAME</a></p>
-                            </div>
-                            <div align="right" class="col-xs-6 col-sm-6 col-md-6 col-lg-6">
-                                <form name="f1" method="POST" action="DOMEN">
-                                    <input type="hidden" name="type_post" value="delete_post">
-                                    <button type="submit" name="elem" value="INDEX" class="btn btn-default btn-del"><span class="glyphicon glyphicon-remove"></span></button>
-                                </form>
-                            </div>
-                        </div>
-                        <p>MESSAGE</p>
-                    </div><!-- /.blog-post -->'''
+        text = '''
+        <div class="blog-post">
+        <div class="row">
+        <div class="col-xs-6 col-sm-6 col-md-6 col-lg-6">
+            <p class="blog-post-meta">DATE <a href="#">USERNAME</a></p>
+        </div>
+        <div align="right" class="col-xs-6 col-sm-6 col-md-6 col-lg-6">
+            <form name="f1" method="POST" action="DOMEN">
+                <input type="hidden" name="type_post" value="delete_post">
+                <button type="submit" name="elem" value="INDEX"
+                                        class="btn btn-default btn-del">
+                <span class="glyphicon glyphicon-remove"></span>
+                </button>
+            </form>
+        </div>
+        </div>
+        <p>MESSAGE</p>
+        </div><!-- /.blog-post -->'''
         # date = str(datetime.datetime.fromtimestamp(
         #    unix).strftime('%Y-%m-%d %H:%M:%S'))
         text = re.sub("DATE", date, text)
