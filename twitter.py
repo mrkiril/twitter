@@ -8,12 +8,13 @@ import logging
 import logging.config
 import configparser
 import sqlite3
-import datetime
 import string
-import hashlib
-import random
 import datetime
 import urllib.parse
+import hashlib
+import binascii
+import random
+import json
 from httpserver import BaseServer
 from httpserver import HttpResponse
 from httpserver import HttpErrors
@@ -41,17 +42,31 @@ class Twitter(BaseServer):
         self.ip, self.port = self.setting_connect()
         self.domen = 'http://' + str(self.ip) + ":" + str(self.port)
         super(Twitter, self).__init__(self.ip, self.port)
-        self.session_toc_user = {}
+
+    def filter_out_data(self, out_data):
+        html_dick = {
+            "<": "&lt;",
+            ">": "&gt;",
+            "&": "&amp;",
+            "‘": "&lsquo;",
+            "’": "&rsquo;",
+            '“': "&ldquo;",
+            '”': "&rdquo;",
+        }
+        for k, v in html_dick.items():
+            out_data = out_data.replace(k, v)
+        return out_data
 
     def main_page(self, request):
+        print("MAIN PAGE MODE")
+        print("IP >> ", self.ip)
         if "twit" not in request.COOKIE:
             self.logger.debug("Theere is no Cookies")
             self.logger.debug("Redirect to auth/")
             return self.redirect_to("/auth")
 
-        cookiessum = request.COOKIE["twit"]
-        user = self.is_really_auth(cookiessum)
-        if user is None:
+        user_id = self.is_really_auth(request.COOKIE["twit"])
+        if not user_id:
             self.logger.debug("Redirect to auth/")
             self.logger.debug("COOKIES not find in base. GOTO ")
             return self.redirect_to("/auth")
@@ -59,9 +74,9 @@ class Twitter(BaseServer):
         if request.method == "GET":
             self.logger.debug("Main Page GET")
             self.logger.debug("return_user_page")
-            self.logger.debug("for user:" + str(user))
-            self.session_toc_user[cookiessum] = user
-            data = self.return_user_page(user)
+            self.logger.debug("for user:" + str(user_id))
+            data = self.return_user_page(user_id)
+
             return HttpResponse(data.encode(), content_type='html')
 
         if request.method == "POST":
@@ -70,22 +85,27 @@ class Twitter(BaseServer):
                 self.logger.debug("POST_POST")
                 if "text" not in request.POST:
                     return self.redirect_to("/auth")
-                self.data_base.add_data_to_sql(user, request.POST["text"])
-                data = self.return_user_page(user)
+
+                self.data_base.add_data_to_sql(user_id, request.POST["text"])
+                data = self.return_user_page(user_id)
+
                 return HttpResponse(data.encode(), content_type='html')
+
             if request.POST["type_post"] == "delete_post":
                 self.logger.debug("DELETE_POST")
                 self.data_base.delete_data_from_sql(
-                    user_id=user,
+                    user_id=user_id,
                     row_id=request.POST["elem"])
-                data = self.return_user_page(user)
+                data = self.return_user_page(user_id)
+
                 return HttpResponse(data.encode(), content_type='html')
 
             if request.POST["type_post"] == "exit":
                 self.logger.debug("EXIT")
+                self.delete_ses(user_id=user_id,
+                                ses_id=request.COOKIE["twit"])
                 date = datetime.datetime(1970, 1, 1, 0, 0)
-                data = ""
-                return HttpResponse(data.encode(),
+                return HttpResponse(b'',
                                     status_code="301",
                                     content_type='html',
                                     location="/auth",
@@ -94,30 +114,33 @@ class Twitter(BaseServer):
 
     def auth(self, request):
         if "twit" in request.COOKIE:
-            cookiessum = request.COOKIE["twit"]
-            cook_user = self.is_really_auth(cookiessum)
-            if cook_user is not None:
+            ses_id = request.COOKIE["twit"]
+            user_id = self.is_really_auth(ses_id)
+            if user_id:
                 return self.redirect_to("/")
 
         if request.method == "POST":
             if "register_email" in request.POST:
-                register_user = self.data_base.is_user_in_base(
-                    request.POST["register_email"])
-                if register_user is None:
-                    cookies = self.data_base.add_auth_to_sql(
-                        request.POST["register_email"],
-                        request.POST["password"])
-                    data = ""
-                    y = datetime.datetime.utcnow().year
-                    date = datetime.datetime(y + 1, 12, 31, 23, 59)
-                    return HttpResponse(data.encode(),
+                salt = self.create_salt()
+                pass_sha = self.create_pass_str(request.POST["password"], salt)
+                auth_status = self.data_base.add_auth_to_sql(
+                    request.POST["register_email"],
+                    pass_sha,
+                    salt)
+
+                if auth_status:
+                    ses_id = self.add_new_ses_id_to_db(
+                        user_id=request.POST["register_email"],
+                        user_ip=request.user_ip,
+                        session_data={})
+                    return HttpResponse(b"",
                                         status_code="301",
                                         content_type='html',
                                         location="/",
-                                        cookies_expires=date,
-                                        set_cookies={"twit": cookies})
+                                        cookies_expires=self.cook_exp(),
+                                        set_cookies={"twit": ses_id})
 
-                if register_user is not None:
+                if not auth_status:
                     data = self.return_auth_page()
                     message = self.message_auth(
                         "3",
@@ -129,24 +152,38 @@ class Twitter(BaseServer):
                                         content_type='html')
 
             if "enter_email" in request.POST:
-                enter_user = self.data_base.is_user_and_pass_in_base(
-                    request.POST["enter_email"], request.POST["password"])
+                is_user = self.data_base.is_user_in_base(
+                    request.POST["enter_email"])
                 data = ''
-                if enter_user is not None:
-                    cookies = enter_user[0]
-                    user = enter_user[1]
-                    self.session_toc_user[cookies] = user
-                    data = ""
-                    y = datetime.datetime.utcnow().year
-                    date = datetime.datetime(y + 1, 12, 31, 23, 59)
+                print("IS USER")
+                print(is_user)
+                if is_user:
+                    user_id, salt, db_pass = is_user
+                    if not self.is_pass_eq_pass(
+                            enter_pass=request.POST["password"],
+                            db_pass=db_pass,
+                            salt=salt):
+                        data = self.return_auth_page()
+                        message = self.message_auth(
+                            "3",
+                            "There is incorrect e-mail or password. Try again")
+                        data = re.sub("<!-- MESSAGE -->", message, data)
+                        return HttpResponse(data.encode(),
+                                            status_code="200",
+                                            content_type='html')
+
+                    ses_id = self.add_new_ses_id_to_db(
+                        user_id=user_id,
+                        user_ip=request.user_ip,
+                        session_data={})
                     return HttpResponse(data.encode(),
                                         status_code="301",
                                         content_type='html',
                                         location="/",
-                                        cookies_expires=date,
-                                        set_cookies={"twit": cookies})
+                                        cookies_expires=self.cook_exp(),
+                                        set_cookies={"twit": ses_id})
 
-                if enter_user is None:
+                if not is_user:
                     data = self.return_auth_page()
                     message = self.message_auth(
                         "3",
@@ -182,15 +219,75 @@ class Twitter(BaseServer):
                             content_type='html',
                             location=loc)
 
-    def is_really_auth(self, cookiessum):
-        if cookiessum not in self.session_toc_user:
-            user = self.data_base.is_auth_by_summ(cookiessum)
-            if user is None:
-                return None
+    def is_pass_eq_pass(self, enter_pass, db_pass, salt):
+        if db_pass == self.create_pass_str(enter_pass, salt):
+            return True
+        else:
+            return False
+
+    def cook_exp(self):
+        y = datetime.datetime.utcnow().year
+        return datetime.datetime(y + 1, 12, 31, 23, 59)
+
+    def delete_ses(self, user_id, ses_id):
+        self.data_base.delete_session_from_sql(user_id, ses_id)
+
+    def add_new_ses_id_to_db(self, user_id, session_data, user_ip):
+        time = datetime.datetime.utcnow().strftime("%A, %d-%b-%Y %H:%M:%S")
+        while True:
+            print("add_new_ses_id_to_db")
+            ses_id = ''.join(
+                [random.choice(string.hexdigits) for i in range(16)])
+            ses_status = self.data_base.add_session_to_sql(
+                session_hash=ses_id,
+                expires=time,
+                user_id=user_id,
+                ip_address=user_ip,
+                session_data=json.dumps(session_data))
+            if ses_status:
+                return ses_id
+
+    def create_salt(self):
+        return os.urandom(8)
+
+    def create_pass_str(self, password, salt):
+        # salt = os.urandom(8)    # 64-bit salt
+        dk = hashlib.pbkdf2_hmac('sha256',
+                                 password.encode(),
+                                 salt,
+                                 1000)
+        sha = binascii.hexlify(dk)
+        return sha
+
+    def is_really_auth(self, ses_id):
+        """
+        Cheak user in session dictionary
+        """
+        print("In really auth mode")
+        user_obj = self.data_base.is_session_in_base(ses_id)
+        if user_obj:
+            user_id, ses_expiries = user_obj
+            print("User id", user_id)
+            time_template = "%A, %d-%b-%Y %H:%M:%S"
+            dt_obj = datetime.datetime.strptime(ses_expiries, time_template)
+            dt_now = datetime.datetime.utcnow()
+            print(dt_now)
+            print(dt_now - dt_obj)
+            dt_delta = dt_now - dt_obj
+            if dt_delta.total_seconds() > 1000:
+                print("DEl mode COOK IS INVALID")
+                self.data_base.delete_session_from_sql(user_id, ses_id)
+                return False
             else:
-                return user
-        if cookiessum in self.session_toc_user:
-            return self.session_toc_user[cookiessum]
+                dt_obj = datetime.datetime.utcnow()
+                dt = str(dt_obj.strftime("%A, %d-%b-%Y %H:%M:%S"))
+                self.data_base.update_session_expires_to_sql(
+                    user_id=user_id,
+                    expires=dt,
+                    ses_id=ses_id)
+                return user_id
+        else:
+            return False
 
     def return_auth_page(self):
         with open("authorisation.html", "r") as fp:
@@ -213,6 +310,7 @@ class Twitter(BaseServer):
             twit = urllib.parse.unquote_plus(twit)
             add_twit_text = self.add_new_html_twit(user_id, twit, date, row_id)
             text = re.sub("<!-- /.blog-post -->", add_twit_text, text)
+
         return text
 
     def message_registr(self, lv, user_message):
@@ -268,12 +366,11 @@ class Twitter(BaseServer):
         </div>
         <p>MESSAGE</p>
         </div><!-- /.blog-post -->'''
-        # date = str(datetime.datetime.fromtimestamp(
-        #    unix).strftime('%Y-%m-%d %H:%M:%S'))
         text = re.sub("DATE", date, text)
         text = re.sub("INDEX", str(row_id), text)
         text = re.sub("DOMEN", self.domen + "/", text)
-        text = re.sub("MESSAGE", twit, text)
+        print(twit, " >>>>> ", self.filter_out_data(twit))
+        text = re.sub("MESSAGE", self.filter_out_data(twit), text)
         return text
 
     def configure(self):

@@ -8,7 +8,6 @@ import configparser
 import sqlite3
 import datetime
 import string
-import hashlib
 import random
 import urllib.parse
 import time
@@ -27,9 +26,10 @@ class DataBese(object):
         self.logger = logging.getLogger(__name__)
         self.file_path = os.path.abspath(os.path.dirname(__file__))
         self.setting_file_path = setting_file_path
-        self.conn, self.c = self.setting_connect()
+        self.conn_str = self.setting_connect()
         self.entry_data_to_sql()
         self.entry_auth_to_sql()
+        self.entry_session_to_sql()
 
     def setting_connect(self):
         config = configparser.ConfigParser()
@@ -37,10 +37,8 @@ class DataBese(object):
         if "database" in config:
             conf = config['database']
             if 'DB' in conf:
-                conn = sqlite3.connect(conf["DB"])
-                c = conn.cursor()
                 self.logger.info("Data base setting is ok")
-                return(conn, c)
+                return conf["DB"]
 
             else:
                 mes = "Setting file is broken."
@@ -55,90 +53,182 @@ class DataBese(object):
                 "There is no 'database' options in setting file")
 
     def entry_data_to_sql(self):
-        q = 'CREATE TABLE IF NOT EXISTS datatable'
-        q += '(datestamp TEXT, message TEXT, user_id TEXT)'
-        self.c.execute(q)
-        self.conn.commit()
+        conn = sqlite3.connect(self.conn_str)
+        c = conn.cursor()
+        q = '''CREATE TABLE IF NOT EXISTS datatable(
+                                                    datestamp TEXT NOT NULL,
+                                                    message TEXT NOT NULL,
+                                                    user_id TEXT NOT NULL)'''
+        c.execute(q)
+        conn.commit()
+        c.close()
+        conn.close()
 
     def add_data_to_sql(self, user_id, message):
+        conn = sqlite3.connect(self.conn_str)
+        c = conn.cursor()
         date = str(datetime.datetime.fromtimestamp(
             time.time()).strftime('%Y-%m-%d %H:%M:%S'))
         q = "INSERT INTO datatable (datestamp, message, user_id)"
         q += " VALUES (?, ?, ?)"
-        self.c.execute(q, (date, message, user_id))
-        self.conn.commit()
+        c.execute(q, (date, message, user_id))
+        conn.commit()
+        c.close()
+        conn.close()
 
     def read_data_from_sql(self, user_id):
+        conn = sqlite3.connect(self.conn_str)
+        c = conn.cursor()
         q = 'SELECT datestamp, message, ROWID '
         q += 'FROM datatable WHERE user_id == ?'
-        self.c.execute(q, (user_id, ))
+        c.execute(q, (user_id, ))
         arr = []
-        for row in self.c.fetchall():
+        for row in c.fetchall():
             arr.append(row)
+        c.close()
+        conn.close()
         return arr
 
     def update_data_to_sql(self, user_id, message):
+        conn = sqlite3.connect(self.conn_str)
+        c = conn.cursor()
         date = str(datetime.datetime.fromtimestamp(
             time.time()).strftime('%Y-%m-%d %H:%M:%S'))
         q = 'UPDATE datatable SET message = ? datestamp = ? WHERE user_id == ?'
-        self.c.execute(q, (str(message), str(date), str(user_id)))
-        self.conn.commit()
+        c.execute(q, (str(message), str(date), str(user_id)))
+        conn.commit()
+        c.close()
+        conn.close()
 
     def delete_data_from_sql(self, user_id, row_id):
+        conn = sqlite3.connect(self.conn_str)
+        c = conn.cursor()
         q = 'DELETE FROM datatable WHERE user_id == ? AND ROWID == ?'
-        self.c.execute(q, (user_id, row_id))
-        self.conn.commit()
+        c.execute(q, (user_id, row_id))
+        conn.commit()
+        c.close()
+        conn.close()
 
     def entry_auth_to_sql(self):
-        q = 'CREATE TABLE IF NOT EXISTS usertable'
-        q += '(user TEXT, password TEXT, cookiessum TEXT)'
-        self.c.execute(q)
-        self.conn.commit()
+        conn = sqlite3.connect(self.conn_str)
+        c = conn.cursor()
+        q = '''CREATE TABLE IF NOT EXISTS usertable(
+                    user TEXT NOT NULL UNIQUE,
+                    password BLOB NOT NULL,
+                    salt BLOB NOT NULL)'''
+        c.execute(q)
+        conn.commit()
+        c.close()
+        conn.close()
 
-    def add_auth_to_sql(self, user, password):
-        a = string.ascii_lowercase + string.digits
-        tocken = ''.join([random.choice(a) for i in range(8)])
-        coockies = user + password + tocken
-        m = hashlib.md5()
-        m.update(coockies.encode())
-        cookiessum = m.hexdigest()
-        q = "INSERT INTO usertable (user, password, cookiessum) "
-        q += "VALUES (?, ?, ?)"
-        self.c.execute(q, (user, password, cookiessum))
-        self.conn.commit()
-        return cookiessum
+    def add_auth_to_sql(self, user, password, salt):
+        conn = sqlite3.connect(self.conn_str)
+        c = conn.cursor()
+        try:
+            q = "INSERT INTO usertable (user, password, salt) "
+            q += "VALUES (?, ?, ?)"
+            c.execute(q, (user, password, salt))
+            conn.commit()
+        except sqlite3.IntegrityError as e:
+            c.close()
+            conn.close()
+            return False
+        else:
+            c.close()
+            conn.close()
+            return True
 
     def read_auth_from_sql(self):
-        self.c.execute('SELECT cookiessum, user FROM usertable')
+        conn = sqlite3.connect(self.conn_str)
+        c = conn.cursor()
+        c.execute('SELECT salt, user FROM usertable')
         arr = []
-        for row in self.c.fetchall():
+        for row in c.fetchall():
             arr.append(row)
+        c.close()
+        conn.close()
         return arr
 
-    def is_user_and_pass_in_base(self, user, password):
-        q = 'SELECT cookiessum, user FROM usertable '
-        q += 'WHERE user == ? AND password == ?'
-        self.c.execute(q, (user, password))
-        tup = self.c.fetchall()
-        if not tup:
-            return None
-        else:
-            return tup[0]
-
     def is_user_in_base(self, user):
-        q = 'SELECT cookiessum, user FROM usertable WHERE user == ?'
-        self.c.execute(q, (user, ))
-        tup = self.c.fetchall()
+        conn = sqlite3.connect(self.conn_str)
+        c = conn.cursor()
+        q = 'SELECT user, salt, password FROM usertable WHERE user == ?'
+        c.execute(q, (user, ))
+        tup = c.fetchall()
         if not tup:
-            return None
+            c.close()
+            conn.close()
+            return False
         else:
+            c.close()
+            conn.close()
             return tup[0]
 
-    def is_auth_by_summ(self, cookiessum):
-        q = 'SELECT user FROM usertable WHERE cookiessum == ?'
-        self.c.execute(q, (cookiessum, ))
-        tup = self.c.fetchall()
-        if not tup:
-            return None
+    def entry_session_to_sql(self):
+        conn = sqlite3.connect(self.conn_str)
+        c = conn.cursor()
+        q = '''CREATE TABLE IF NOT EXISTS sessiontable(
+                    session_hash TEXT NOT NULL UNIQUE,
+                    expires TEXT NOT NULL,
+                    user_id TEXT NOT NULL,
+                    ip_address TEXT NOT NULL,
+                    session_data TEXT NOT NULL)'''
+        c.execute(q)
+        conn.commit()
+        c.close()
+        conn.close()
+
+    def add_session_to_sql(self, session_hash, expires,
+                           user_id, ip_address, session_data):
+        conn = sqlite3.connect(self.conn_str)
+        c = conn.cursor()
+        try:
+            q = '''INSERT INTO sessiontable (session_hash, expires,
+            user_id, ip_address, session_data) '''
+            q += "VALUES (?, ?, ?, ?, ?)"
+            c.execute(q, (session_hash, expires,
+                          user_id, ip_address, session_data))
+            conn.commit()
+        except sqlite3.IntegrityError as e:
+            c.close()
+            conn.close()
+            return False
         else:
-            return tup[0][0]
+            c.close()
+            conn.close()
+            return True
+
+    def is_session_in_base(self, ses_id):
+        conn = sqlite3.connect(self.conn_str)
+        c = conn.cursor()
+        q = 'SELECT user_id, expires FROM sessiontable WHERE session_hash == ?'
+        c.execute(q, (ses_id, ))
+        tup = c.fetchall()
+        if not tup:
+            c.close()
+            conn.close()
+            return False
+        else:
+            c.close()
+            conn.close()
+            return tup[0]
+
+    def update_session_expires_to_sql(self, user_id, expires, ses_id):
+        conn = sqlite3.connect(self.conn_str)
+        c = conn.cursor()
+        q = 'UPDATE sessiontable SET expires = ? '
+        q += 'WHERE user_id == ? AND session_hash == ?'
+        c.execute(q, (expires, user_id, ses_id))
+        conn.commit()
+        c.close()
+        conn.close()
+
+    def delete_session_from_sql(self, user_id, ses_id):
+        conn = sqlite3.connect(self.conn_str)
+        c = conn.cursor()
+        print("DEL SESSION")
+        q = 'DELETE FROM sessiontable WHERE user_id == ? AND session_hash == ?'
+        c.execute(q, (user_id, ses_id))
+        conn.commit()
+        c.close()
+        conn.close()
