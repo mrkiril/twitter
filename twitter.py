@@ -20,6 +20,8 @@ from httpserver import HttpResponse
 from httpserver import HttpErrors
 from twitter_db import DataBese
 from time import sleep
+from urllib.parse import quote_plus
+from urllib.parse import unquote_plus
 
 
 class Twitter(BaseServer):
@@ -43,19 +45,31 @@ class Twitter(BaseServer):
         self.domen = 'http://' + str(self.ip) + ":" + str(self.port)
         super(Twitter, self).__init__(self.ip, self.port)
 
-    def filter_out_data(self, out_data):
+    def filter_twit(self, twit):
+        twit = unquote_plus(twit)
+        return self.filter_out_data(twit)
+
+    def filter_out_data(self, twit):
         html_dick = {
+            "&": "&amp;",
             "<": "&lt;",
             ">": "&gt;",
-            "&": "&amp;",
             "‘": "&lsquo;",
             "’": "&rsquo;",
             '“': "&ldquo;",
             '”': "&rdquo;",
+            "'": "&apos;",
+            '"': "&quot;"
         }
+        twit = "".join([s for s in twit if ord(s) > 31])
+        twit = twit[:100]
+        twit = re.sub(r'\s+', ' ', twit)
+        twit = re.sub('\s+', ' ', twit)
+        twit = re.sub('^ ', '', twit)
+        twit = re.sub(' $', '', twit)
         for k, v in html_dick.items():
-            out_data = out_data.replace(k, v)
-        return out_data
+            twit = twit.replace(k, v)
+        return twit
 
     def main_page(self, request):
         print("MAIN PAGE MODE")
@@ -76,7 +90,6 @@ class Twitter(BaseServer):
             self.logger.debug("return_user_page")
             self.logger.debug("for user:" + str(user_id))
             data = self.return_user_page(user_id)
-
             return HttpResponse(data.encode(), content_type='html')
 
         if request.method == "POST":
@@ -85,10 +98,11 @@ class Twitter(BaseServer):
                 self.logger.debug("POST_POST")
                 if "text" not in request.POST:
                     return self.redirect_to("/auth")
+                self.data_base.add_data_to_sql(
+                    user_id,
+                    self.filter_twit(request.POST["text"]))
 
-                self.data_base.add_data_to_sql(user_id, request.POST["text"])
                 data = self.return_user_page(user_id)
-
                 return HttpResponse(data.encode(), content_type='html')
 
             if request.POST["type_post"] == "delete_post":
@@ -97,7 +111,6 @@ class Twitter(BaseServer):
                     user_id=user_id,
                     row_id=request.POST["elem"])
                 data = self.return_user_page(user_id)
-
                 return HttpResponse(data.encode(), content_type='html')
 
             if request.POST["type_post"] == "exit":
@@ -307,7 +320,6 @@ class Twitter(BaseServer):
         arr = self.data_base.read_data_from_sql(user_id)
         for ar in arr:
             date, twit, row_id = ar
-            twit = urllib.parse.unquote_plus(twit)
             add_twit_text = self.add_new_html_twit(user_id, twit, date, row_id)
             text = re.sub("<!-- /.blog-post -->", add_twit_text, text)
 
@@ -369,8 +381,7 @@ class Twitter(BaseServer):
         text = re.sub("DATE", date, text)
         text = re.sub("INDEX", str(row_id), text)
         text = re.sub("DOMEN", self.domen + "/", text)
-        print(twit, " >>>>> ", self.filter_out_data(twit))
-        text = re.sub("MESSAGE", self.filter_out_data(twit), text)
+        text = re.sub("MESSAGE", twit, text)
         return text
 
     def configure(self):

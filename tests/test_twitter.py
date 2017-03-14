@@ -141,6 +141,15 @@ class Test_serv(unittest.TestCase):
                 'test_ser@ukr.net')]
         self.assertNotIn('Some new post 0', post_data_list)
 
+        # Test filter data
+        #
+        #
+        self.fiter_test_data("<script>alert('test');</script>")
+        self.fiter_test_data("<h1>LALKA</h1")
+        self.fiter_test_data("<script>alert('INVALID USER &');</script>")
+        self.fiter_test_data("<h2>'</h2>")
+        self.fiter_test_data('''<h3>'"&<></h3>''')
+
         # Exit
         #
         res = self.client.post('http://' + self.domen + '/',
@@ -168,6 +177,19 @@ class Test_serv(unittest.TestCase):
                                      'password': 'new_password'})
         user_list = list(dict(self.data_base.read_auth_from_sql()).values())
         self.assertIn(b'There is user with this e-mail. Try another', res.body)
+
+    def fiter_test_data(self, test_str):
+        print(test_str)
+        res = self.client.post('http://' + self.domen + '/',
+                               data={'type_post': 'post_post',
+                                     'text': test_str})
+
+        db_elem = self.data_base.read_data_from_sql('test_ser@ukr.net')
+        post_data_list = [el[1] for el in db_elem]
+        for elem in post_data_list:
+            print(elem)
+            for symbols in ["<", ">", "'", '"']:
+                self.assertNotIn(symbols, elem)
 
 
 if __name__ == '__main__':
