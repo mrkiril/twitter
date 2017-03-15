@@ -1,17 +1,49 @@
-Description
-===========
+Twitter WEB SERVER
+=============================
 
-Python simple twitter server
-first you must have Git in your pc. If not you can easy do this run command "apt-get install git"
+Thank you for choosing this server.
+
+
+INSTALLATION
+------------
+
+After installation you shall see the following files and directories:
+
+      form/                css/ js/ fonts/ auxiliary folders
+      setting/             setting files
+      tests/               test files
+      authorisation.html   auth page
+      forms.html	   main page
+      README               this file
+      requirements.txt     requirements that must necessarily be established
+      twitter.py	   main file
+      twitter_db.py        Manipulation with DB
+
+
+REQUIREMENTS
+------------
+
+The minimum requirement you must have Git in your pc.
+If not, you can easily do this call "apt-get install git"
 profit!
 
+
+QUICK START
+-----------
+
 Run your virtualenv or pyvenv mashine.
-Next step do only from virtualenv or pyvenv
-	0) in file setting/setting.ini in [ip_port_setting] block you can set ip and port which will be listening server
-	1) And in same file in [database] block set the path to the database. Without this path serv will not start
-	2) run requirements.txt file by command "pip install -r requirements.txt" to set all the required libraries
-	3) if you want start server need run command "python3 search_serv.py"
+Next step do only from virtualenv or pyvenv:
 
-Default Settings IP = 127.0.0.1, port = 8080, if you did not change it, type in the browser bar 127.0.0.1:8080 otherwise your parameters, which would go to the start page.
+	0) In file setting/setting.ini in [ip_port_setting] block you can set ip and port.
+	   They give you access to server.
+	
+	1) And in same file in [database] block set the path to the database. 
+           Without this path server will not start. 
+           if file is not exist, server will create it.
+	
+	2) Run requirements.txt call "pip install -r requirements.txt" to set all the required libraries
+	
+        3) If you want start server need call "python3 search_serv.py". 
+	   But you should be in the location directory of this file
 
-Test file you can find in twitter/test run like "python3 test_twitter.py"
+
