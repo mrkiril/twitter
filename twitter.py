@@ -50,8 +50,8 @@ class Twitter(BaseServer):
         return self.filter_out_data(twit)
 
     def filter_out_data(self, twit):
+        twit = re.sub("&", "&amp;", twit)
         html_dick = {
-            "&": "&amp;",
             "<": "&lt;",
             ">": "&gt;",
             "‘": "&lsquo;",
